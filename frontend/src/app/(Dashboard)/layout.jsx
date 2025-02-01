@@ -34,18 +34,18 @@ const sidebarLinks = [
     icon: Bot,
     color: "text-blue-500"
   },
-  {
-    title: "Govt. Scheme Advisor",
-    href: "/dashboard/govtSchemeAdvisor",
-    icon: PiggyBank,
-    color: "text-blue-500"
-  },
-  {
-    title: "Reports",
-    href: "/dashboard/reports",
-    icon: ArrowUpNarrowWide,
-    color: "text-blue-500"
-  },
+  // {
+  //   title: "Govt. Scheme Advisor",
+  //   href: "/dashboard/govtSchemeAdvisor",
+  //   icon: PiggyBank,
+  //   color: "text-blue-500"
+  // },
+  // {
+  //   title: "Reports",
+  //   href: "/dashboard/reports",
+  //   icon: ArrowUpNarrowWide,
+  //   color: "text-blue-500"
+  // },
   {
     title: "Overview",
     href: "/dashboard",
