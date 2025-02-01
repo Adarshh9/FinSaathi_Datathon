@@ -1,0 +1,10 @@
+Flask
+Flask_Cors
+groq
+numpy
+pandas
+pypdf
+python-dotenv
+scikit_learn
+sentence_transformers
+Werkzeug
