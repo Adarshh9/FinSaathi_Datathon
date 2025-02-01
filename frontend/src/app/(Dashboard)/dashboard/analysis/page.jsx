@@ -242,7 +242,9 @@ const VolumeChart = ({ data }) => (
             tickFormatter={(date) => new Date(date).toLocaleDateString()}
             stroke="#888"
           />
-          <YAxis stroke="#888" />
+          <YAxis stroke="#888" 
+           tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} 
+          />
           <Tooltip 
             labelFormatter={(date) => new Date(date).toLocaleDateString()}
             formatter={(value) => [new Intl.NumberFormat().format(value), 'Volume']}
