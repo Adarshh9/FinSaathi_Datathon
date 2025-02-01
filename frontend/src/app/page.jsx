@@ -2,12 +2,12 @@
 import React from 'react';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Button } from "@/components/ui/button"
-
-import { ArrowRight, Check, Menu } from 'lucide-react';
+import { ArrowRight, Check, Menu, Share2, TrendingUp } from 'lucide-react';
 import Image from 'next/image';
 import demo from '@/assets/demoFinsaathi.png';
 import logo from '@/assets/finsaathi-logo.png';
 import bg from '@/assets/bg.jpg';
+import wqr from '@/assets/whatsapp-qr.png';
 
 import {
   ClerkProvider,
@@ -30,8 +30,6 @@ import {
 import teamIllustration from '@/assets/team-illustration.png';
 
 const HomePage = () => {
- 
-
   return (
     <div className="font-inter bg-gradient-to-b from-background to-secondary/10 min-h-screen">
       <header className="fixed w-full bg-background/80 backdrop-blur-sm z-50">
@@ -58,8 +56,8 @@ const HomePage = () => {
               <Sheet>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon">
-                      <Menu />
-                    </Button>
+                    <Menu />
+                  </Button>
                 </SheetTrigger>
                 <SheetContent>
                   <SheetHeader>
@@ -83,15 +81,15 @@ const HomePage = () => {
         </div>
       </header>
 
-      <main className="pt-24 pb-16 ">
+      <main className="pt-24 pb-16">
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 animate-fadeInUp">
             <a href="">
-              <div className="inline-block bg-black-100 text-primary rounded-full px-3 py-2 text-sm font-semibold mb-4 bg-gray-100 bg-primary-foreground">
-                <span className=" rounded-full py-1 px-2 bg-blue-600 text-white" >New</span>
-                <span className="ml-2">Now with URL Support</span>
-                <ArrowRight className="inline ml-1" size={16} />
-              </div>
+            <div className="inline-flex items-center bg-primary/10 text-primary rounded-full px-4 py-2 text-sm font-medium">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Real-time Market Insights
+              <span className="ml-2 px-2 py-0.5 bg-primary text-white rounded-full text-xs">New</span>
+            </div>
             </a>
             <h1 className="text-5xl sm:text-6xl font-bold">
               Welcome to <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600">Fin<span className="font-['Devanagari'] text-5xl">साथी</span></span>
@@ -100,105 +98,87 @@ const HomePage = () => {
               Your Ultimate <span className="text-primary font-semibold">Destination</span> for Financial Advice
             </p>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Platform for the Expense Tracking and Government Scheme advisor along with AI Chatbot.
+              Platform for the Expense Tracking and Government Scheme advisor along with AI Chatbot.
             </p>
-            <a
-              href="/dashboard"
-              className="inline-flex items-center px-6 py-3 mt-4 rounded-full text-lg font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 ease-in-out hover:scale-105"
-            >
-              Get Started for Free <ArrowRight className="ml-2" />
-            </a>
+            <div className="flex justify-center gap-4 mt-8">
+              <SignedOut>
+                <SignInButton>
+                  <Button className="rounded-full px-8 py-6 text-lg gap-2">
+                    Get Started <ArrowRight size={18} />
+                  </Button>
+                </SignInButton>
+              </SignedOut>
+            </div>
           </div>
 
           <div className="mt-16 animate-fadeInUp">
-            <Image src={demo} alt="TrueSight Demo" className="" />
+            <Image src={demo} alt="TrueSight Demo" className="border rounded-2xl shadow-xl overflow-hidden" />
           </div>
 
-          <div className="mt-16 text-center animate-fadeInUp">
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              Finsaathi is a cutting-edge solution designed to combat fake news. With high credibility, it helps users verify the authenticity of information. Its intuitive interface ensures ease of use for individuals, media outlets, and social media platforms seeking reliable news sources.
-            </p>
-          </div>
-        </section>
-        <section className="w-full bg-primary text-white py-20 mt-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Main Content */}
-            {/* <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
+          {/* WhatsApp Integration Section */}
+          <section className="mt-24 bg-background p-8 rounded-2xl border shadow-lg">
+            <div className="grid md:grid-cols-2 gap-12 items-center">
               <div className="space-y-6">
-                <h2 className="text-4xl font-bold leading-tight">
-                  Over 50% of Indians Lack Access
-                </h2>
-                <p className="text-xl leading-relaxed">
-                  Despite numerous beneficial government schemes, more than half of India's population remains unaware of available support and resources. Bridging this awareness gap is essential for ensuring these programs reach those who need them most.
+                <div className="flex items-center gap-3 mb-6">
+                  <Share2 className="text-black-600 w-8 h-8" />
+                  <h2 className="text-3xl font-semibold">
+                    Share Insights Instantly
+                  </h2>
+                </div>
+                <p className="text-lg text-muted-foreground">
+                  Generate comprehensive reports and share directly with your 
+                  team or clients via WhatsApp
                 </p>
-                <button className="bg-white text-primary px-8 py-3 rounded-full font-semibold hover:bg-opacity-90 transition-all">
-                  Learn More
-                </button>
+                <div className="bg-muted p-6 rounded-xl">
+                  <p className="font-medium flex items-center gap-2">
+                    <span className="text-black-600">➤</span> Send 
+                    <code className="mx-2 px-2 py-1 bg-primary/10 text-primary rounded">
+                      join rise-mysterious
+                    </code> 
+                    to
+                  </p>
+                  <p className="text-xl font-bold mt-2 flex items-center">
+                    <span className="bg-black-100 text-black-800 px-3 py-1 rounded-lg mr-2">
+                      WhatsApp
+                    </span>
+                    +1 415 523 8886
+                  </p>
+                </div>
               </div>
               <div className="flex justify-center">
-                <Image 
-                  src={teamIllustration}
-                  alt="Government schemes illustration" 
-                  className="rounded-xl shadow-2xl hover:scale-105 transition-transform duration-300"
-                  width={500}
-                  height={400}
-                  priority
-                />
-              </div>
-            </div> */}
-
-            {/* Video Section */}
-            <div className="">
-              <h3 className="text-2xl font-bold text-center mb-10">Watch How We're Making a Difference</h3>
-              <div className="grid md:grid-cols-2 gap-8">
-                {/* Video 1 */}
-                <div className="relative overflow-hidden rounded-xl shadow-xl">
-                  <div className="aspect-video">
-                    <iframe
-                      className="absolute w-full h-full"
-                      src="https://youtu.be/8zWQ9aXmeaY?si=Nf2031nz7xfd0seT"
-                      title="Video 1"
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    ></iframe>
-                  </div>
-                </div>
-                
-                {/* Video 2 */}
-                <div className="relative overflow-hidden rounded-xl shadow-xl">
-                  <div className="aspect-video">
-                    <iframe
-                      className="absolute w-full h-full"
-                      src="https://youtu.be/8zWQ9aXmeaY?si=Nf2031nz7xfd0seT"
-                      title="Video 2"
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    ></iframe>
-                  </div>
+                <div className="rounded-xl border-2 border-purple-600 p-4 bg-white w-[220px] h-[220px] overflow-hidden ">
+                  {/* Placeholder for QR Code */}
+                  <Image src={wqr} alt="TrueSight Demo" className="w-fit" />
                 </div>
               </div>
             </div>
-          </div>
-        </section>
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-24">
-          <div className="grid md:grid-cols-3 gap-8 animate-fadeInUp">
+          </section>
+
+          <section className="mt-24 grid md:grid-cols-3 gap-8 animate-fadeInUp">
             {[
-              { title: "Advanced AI", description: "Cutting-edge algorithms to detect fake news" },
-              { title: "User-Friendly", description: "Intuitive interface for all users" },
-              { title: "Real-Time Analysis", description: "Get instant results on news authenticity" }
+              {
+                title: "Trend Prediction Engine",
+                description: "Machine learning models analyzing historical patterns and real-time market movements"
+              },
+              {
+                title: "Sector Analytics",
+                description: "Deep dive into specific industries with comparative performance metrics"
+              },
+              {
+                title: "Portfolio Advisor",
+                description: "AI-driven recommendations based on risk profile and market conditions"
+              }
             ].map((feature, index) => (
               <div 
                 key={index} 
-                className="bg-card p-6 rounded-lg shadow-lg transition-all duration-300 ease-in-out hover:scale-105"
+                className="bg-card p-8 rounded-xl border hover:shadow-xl transition-shadow"
               >
                 <Check className="text-primary mb-4" size={24} />
                 <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
                 <p className="text-muted-foreground">{feature.description}</p>
               </div>
             ))}
-          </div>
+          </section>
         </section>
 
         <section className="bg-primary text-primary-foreground mt-24 py-16">
@@ -216,11 +196,14 @@ const HomePage = () => {
         </section>
       </main>
 
-      <footer className="bg-background">
+      <footer className="bg-background border-t">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid md:grid-cols-2 gap-8">
             <div>
-              <h3 className="text-2xl font-semibold mb-4">Finsaathi</h3>
+              <h3 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+                <Image src={logo} alt="Logo" className="w-8 h-8" />
+                Finsaathi
+              </h3>
               <p className="text-muted-foreground">
                 Mumbai Hacks, Atlas Skilltech, Kurla<br />
                 25th October 2024

@@ -10,6 +10,7 @@ import os
 from financial_analyzer import FinancialAnalyzer
 import warnings
 import yfinance as yf
+from financial_narrative_generator import FinancialNarrativeGenerator  # Import the new class
 
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
@@ -68,8 +69,8 @@ class FinSaathiAI:
 # Initialize components
 try:
     ai_assistant = FinSaathiAI()
-    matcher = ImprovedSchemeMatcher()
-    matcher.load_schemes("./Government_Schemes-English.pdf")
+    # matcher = ImprovedSchemeMatcher()
+    # matcher.load_schemes("./Government_Schemes-English.pdf")
 except Exception as e:
     print(f"Initialization error: {str(e)}")
     ai_assistant = None
@@ -114,80 +115,6 @@ def chat():
     except Exception as e:
         return create_error_response(str(e), 500)
 
-@app.route('/api/match-schemes', methods=['POST'])
-def match_schemes():
-    if matcher is None:
-        return create_error_response("Scheme matcher is not properly initialized", 500)
-
-    try:
-        data = request.get_json()
-        if not data:
-            return create_error_response("No data provided")
-
-        # Validate required fields
-        required_fields = ["gender", "age", "occupation", "income", "category", "location"]
-        missing_fields = [field for field in required_fields if not data.get(field)]
-        
-        if missing_fields:
-            return create_error_response(f"Missing required fields: {', '.join(missing_fields)}")
-        
-        # Create profile dictionary
-        profile = {
-            "gender": str(data["gender"]).lower(),
-            "age": data["age"],
-            "occupation": str(data["occupation"]).lower(),
-            "income": float(data["income"]),
-            "category": str(data["category"]).lower(),
-            "location": str(data["location"]).lower()
-        }
-        
-        matches = matcher.find_matching_schemes(profile, top_k=5)
-        
-        formatted_matches = [{
-            "scheme_code": match["scheme_code"],
-            "scheme_name": match["scheme_name"],
-            "ministry": match["ministry"],
-            "objective": match["objective"],
-            "beneficiary": match["beneficiary"],
-            "features": match["features"],
-            "match_score": float(match["match_score"]),
-            "keyword_score": float(match["keyword_score"]),
-            "semantic_score": float(match["semantic_score"]),
-            "relevance_reasons": match["relevance_reasons"]
-        } for match in matches]
-        
-        return jsonify({
-            "status": "success",
-            "matches": formatted_matches
-        })
-    except ValueError as ve:
-        return create_error_response(f"Invalid data format: {str(ve)}")
-    except Exception as e:
-        return create_error_response(str(e), 500)
-
-@app.route('/api/generate-report', methods=['POST'])
-def generate_financial_report():
-    try:
-        data = request.get_json()
-        if not data:
-            return create_error_response("No data provided")
-
-        assistant = PersonalFinanceAssistant()
-        report = assistant.generate_financial_report(
-            income=float(data['income']),
-            expenses=data['expenses'],
-            savings=float(data['savings']),
-            goals=data['goals']
-        )
-
-        return jsonify({
-            "status": "success",
-            "report": report
-        })
-    except ValueError as ve:
-        return create_error_response(f"Invalid data format: {str(ve)}")
-    except Exception as e:
-        return create_error_response(str(e), 500)
 
 @app.errorhandler(404)
 def not_found(error):
@@ -268,6 +195,152 @@ def search_symbols():
         
     except Exception as e:
         return create_error_response(str(e), 500)
+
+
+@app.route('/api/financial/analyze', methods=['POST'])
+def analyze_stock_detailed():
+    """Endpoint for detailed stock analysis using FinancialNarrativeGenerator"""
+    try:
+        data = request.get_json()
+        if not data or 'symbol' not in data:
+            return create_error_response("No symbol provided")
+        
+        symbol = data['symbol']
+        api_key = os.environ.get('GROQ_API_KEY')
+        
+        # Initialize the generator
+        generator = FinancialNarrativeGenerator(symbol, api_key)
+        
+        # Fetch historical data
+        historical_data = generator.fetch_historical_data()
+        
+        # Perform Monte Carlo simulation
+        sim_results, risk_metrics = generator.monte_carlo_simulation(historical_data)
+        
+        # Perform backtesting
+        backtest_metrics, historical_data = generator.backtest_strategy(historical_data)
+        
+        # Generate AI insights
+        narrative = generator.get_stock_insights(
+            historical_data,
+            sim_results,
+            risk_metrics,
+            backtest_metrics
+        )
+        
+        # Create visualization
+        fig = generator.plot_advanced_analysis(historical_data)
+        
+        # Convert plotly figure to JSON
+        plot_json = fig.to_json()
+        
+        # Prepare the response
+        response_data = {
+            'symbol': symbol,
+            'narrative': narrative,
+            'technical_analysis': {
+                'plot': plot_json,
+                'risk_metrics': {k: float(v) for k, v in risk_metrics.items()},
+                'backtest_metrics': {k: float(v) if isinstance(v, (int, float)) else v 
+                                   for k, v in backtest_metrics.items()}
+            },
+            'monte_carlo': {
+                'expected_price': float(sim_results['mean_path'].iloc[-1]),
+                'confidence_interval': {
+                    'lower': float(sim_results['lower_95'].iloc[-1]),
+                    'upper': float(sim_results['upper_95'].iloc[-1])
+                }
+            },
+            'historical_data': historical_data.to_dict(orient='records')
+        }
+        
+        return jsonify({
+            "status": "success",
+            "data": response_data
+        })
+        
+    except Exception as e:
+        return create_error_response(str(e), 500)
+
+@app.route('/api/financial/confidence', methods=['POST'])
+def get_confidence_score():
+    """Endpoint to get confidence scores for a stock"""
+    try:
+        data = request.get_json()
+        if not data or 'symbol' not in data:
+            return create_error_response("No symbol provided")
+        
+        symbol = data['symbol']
+        api_key = os.environ.get('GROQ_API_KEY')
+        
+        # Initialize the generator
+        generator = FinancialNarrativeGenerator(symbol, api_key)
+        
+        # Fetch historical data
+        historical_data = generator.fetch_historical_data()
+        
+        # Perform Monte Carlo simulation
+        sim_results, risk_metrics = generator.monte_carlo_simulation(historical_data)
+        
+        # Perform backtesting
+        backtest_metrics, historical_data = generator.backtest_strategy(historical_data)
+        
+        # Calculate confidence scores
+        confidence_report = generator.confidence_scorer.calculate_overall_confidence(
+            historical_data,
+            risk_metrics,
+            sim_results,
+            backtest_metrics
+        )
+        
+        # Add interpretation
+        confidence_report['interpretation'] = generator.confidence_scorer.get_confidence_interpretation(
+            confidence_report['overall_confidence']
+        )
+        
+        return jsonify({
+            "status": "success",
+            "data": confidence_report
+        })
+        
+    except Exception as e:
+        return create_error_response(str(e), 500)
+
+@app.route('/api/financial/backtest', methods=['POST'])
+def backtest_strategy():
+    """Endpoint to backtest trading strategy for a stock"""
+    try:
+        data = request.get_json()
+        if not data or 'symbol' not in data:
+            return create_error_response("No symbol provided")
+        
+        symbol = data['symbol']
+        initial_capital = float(data.get('initial_capital', 100000))
+        api_key = os.environ.get('GROQ_API_KEY')
+        
+        # Initialize the generator
+        generator = FinancialNarrativeGenerator(symbol, api_key)
+        
+        # Fetch historical data
+        historical_data = generator.fetch_historical_data()
+        
+        # Perform backtesting
+        backtest_metrics, historical_data = generator.backtest_strategy(historical_data, initial_capital)
+        
+        response_data = {
+            'metrics': {k: float(v) if isinstance(v, (int, float)) else v 
+                       for k, v in backtest_metrics.items()},
+            'portfolio_history': historical_data[['Portfolio_Value', 'Strategy_Returns', 'Cum_Strategy_Returns', 'Cum_Market_Returns']].to_dict(orient='records')
+        }
+        
+        return jsonify({
+            "status": "success",
+            "data": response_data
+        })
+        
+    except Exception as e:
+        return create_error_response(str(e), 500)
+
 
 
 if __name__ == '__main__':
