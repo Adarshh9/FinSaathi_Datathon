@@ -1,372 +1,910 @@
 'use client';
-import React, { useState, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, PieChart, Plus, Ban, Trash2 } from 'lucide-react';
-import { useExpense } from '@/context/ExpenseContext';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, Legend
-} from 'recharts';
 
-// Constants
-const CATEGORIES = ['food', 'transport', 'utilities', 'entertainment', 'shopping'];
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
-const INITIAL_EXPENSE_STATE = {
-  amount: '',
-  category: 'food',
-  description: '',
-  date: new Date().toISOString().split('T')[0]
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Legend,
+  AreaChart,
+  Area
+} from 'recharts';
+import {
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Banknote,
+  DollarSign,
+  RefreshCcw,
+  Search,
+  AlertCircle,
+  ArrowUpRight,
+  ArrowDownRight,
+  Info,
+  Percent,
+  BarChart2,
+  Target,
+  TrendingUp as TrendingUpIcon,
+  Shield,
+  Navigation
+} from 'lucide-react';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+// API Functions
+const executeAnalysis = async (symbol) => {
+  try {
+    const response = await fetch('http://localhost:5000/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    });
+    if (!response.ok) throw new Error('Failed to execute analysis');
+    return await response.json();
+  } catch (error) {
+    console.error('Error executing analysis:', error);
+    throw error;
+  }
 };
 
-// Reusable Components
-const EmptyState = ({ message }) => (
-  <div className="flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
-    <Ban className="h-12 w-12 mb-4" />
-    <p>{message}</p>
-  </div>
-);
-
-const ChartWrapper = ({ children, data, height = "300px" }) => {
-  if (!data?.length) {
-    return <EmptyState message="No data available" />;
+const executeDetailedAnalysis = async (symbol) => {
+  try {
+    const response = await fetch('http://localhost:5000/api/financial/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    });
+    if (!response.ok) throw new Error('Failed to execute detailed analysis');
+    return await response.json();
+  } catch (error) {
+    console.error('Error executing detailed analysis:', error);
+    throw error;
   }
+};
+const getConfidenceScore = async (symbol) => {
+  try {
+    const response = await fetch('http://localhost:5000/api/financial/confidence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    });
+    
+    if (!response.ok) throw new Error('Failed to get confidence score');
+    
+    // Preprocess the response text to replace NaN with null
+    const responseText = await response.text();
+    const sanitizedText = responseText.replace(/NaN/g, 'null');
+    const data = JSON.parse(sanitizedText);
+    
+    // Sanitize the confidence data to handle NaN values
+    const sanitizedData = {
+      overall_confidence: parseFloat(data.data.overall_confidence) || 0,
+      technical_confidence: parseFloat(data.data.technical_confidence.score) || 0,
+      statistical_confidence: parseFloat(data.data.statistical_confidence.score) || 0,
+      market_confidence: parseFloat(data.data.market_confidence.score) || 0
+    };
+    
+    return { status: data.status, data: sanitizedData };
+  } catch (error) {
+    console.error('Error getting confidence score:', error);
+    // Return default values if there's an error
+    return {
+      status: "error",
+      data: {
+        overall_confidence: 0,
+        technical_confidence: 0,
+        statistical_confidence: 0,
+        market_confidence: 0
+      }
+    };
+  }
+};
+
+const backtestStrategy = async (symbol, initialCapital = 100000) => {
+  try {
+    const response = await fetch('http://localhost:5000/api/financial/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, initial_capital: initialCapital }),
+    });
+    if (!response.ok) throw new Error('Failed to backtest strategy');
+    return await response.json();
+  } catch (error) {
+    console.error('Error backtesting strategy:', error);
+    throw error;
+  }
+};
+
+const searchSymbols = async (query) => {
+  try {
+    const response = await fetch(`http://localhost:5000/api/symbols/search?q=${encodeURIComponent(query)}`);
+    if (!response.ok) throw new Error('Failed to search symbols');
+    const data = await response.json();
+    return data.results || [];
+  } catch (error) {
+    console.error('Error searching symbols:', error);
+    return [];
+  }
+};
+
+// Components
+const MetricCard = ({ title, value, change, icon: Icon, description }) => {
+  const isPositive = change >= 0;
+  const changeColor = isPositive ? 'text-green-500' : 'text-red-500';
+  const bgColor = isPositive ? 'bg-green-50' : 'bg-red-50';
+  const ChangeIcon = isPositive ? ArrowUpRight : ArrowDownRight;
+  
   return (
-    <div style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        {children}
-      </ResponsiveContainer>
-    </div>
+    <Card className="hover:shadow-lg transition-shadow duration-200">
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className={`p-2 rounded-full ${bgColor}`}>
+              <Icon className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">{title}</p>
+              <div className="flex items-center mt-1">
+                <span className="text-2xl font-bold">{value}</span>
+                <div className={`ml-2 flex items-center ${changeColor}`}>
+                  <ChangeIcon className="h-4 w-4" />
+                  <span className="text-sm font-medium ml-1">
+                    {Math.abs(change).toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
   );
 };
 
-const ExpenseForm = ({ onSubmit, initialState }) => {
-  const [formData, setFormData] = useState(initialState);
+// Updated ConfidenceScore component
+const ConfidenceScore = ({ score, interpretation, technical, statistical, market }) => {
+  // Ensure score is a valid number between 0 and 1
+  const validScore = score !== null ? Math.min(Math.max(parseFloat(score) || 0, 0), 1) : null;
+
+  return (
+    <Card className="hover:shadow-lg transition-shadow duration-200">
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <Target className="h-5 w-5" />
+          <span>Confidence Score</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {validScore !== 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Overall Confidence</span>
+                <span className="text-sm font-bold">{(validScore * 100).toFixed(1)}%</span>
+              </div>
+              <Progress value={validScore * 100} className="h-2" />
+            </div>
+          )}
+          {technical !== 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Technical Confidence</span>
+                <span className="text-sm font-bold">{(technical * 100).toFixed(1)}%</span>
+              </div>
+              <Progress value={technical * 100} className="h-2" />
+            </div>
+          )}
+          {statistical !== 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Statistical Confidence</span>
+                <span className="text-sm font-bold">{(statistical * 100).toFixed(1)}%</span>
+              </div>
+              <Progress value={statistical * 100} className="h-2" />
+            </div>
+          )}
+          {market !== 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Market Confidence</span>
+                <span className="text-sm font-bold">{(market * 100).toFixed(1)}%</span>
+              </div>
+              <Progress value={market * 100} className="h-2" />
+            </div>
+          )}
+          </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const BacktestResults = ({ data }) => (
+  <Card className="col-span-2 hover:shadow-lg transition-shadow duration-200">
+    <CardHeader>
+      <CardTitle className="flex items-center space-x-2">
+        <TrendingUpIcon className="h-5 w-5" />
+        <span>Strategy Performance</span>
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {Object.entries(data.metrics).map(([key, value]) => (
+          <div key={key} className="space-y-1">
+            <p className="text-sm text-gray-500">{key.replace(/_/g, ' ')}</p>
+            <p className="text-lg font-medium">
+              {typeof value === 'number' ? value.toFixed(2) : value}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data.portfolio_history}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Area
+              type="monotone"
+              dataKey="Portfolio_Value"
+              stroke="#8884d8"
+              fill="#8884d8"
+              fillOpacity={0.3}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const RiskMetrics = ({ metrics }) => (
+  <Card className="hover:shadow-lg transition-shadow duration-200">
+    <CardHeader>
+      <CardTitle className="flex items-center space-x-2">
+        <Shield className="h-5 w-5" />
+        <span>Risk Metrics</span>
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div className="grid grid-cols-2 gap-4">
+        {Object.entries(metrics).map(([key, value]) => (
+          <div key={key} className="space-y-1">
+            <p className="text-sm text-gray-500">{key.replace(/_/g, ' ')}</p>
+            <p className="text-lg font-medium">{(value * 100).toFixed(2)} %</p>
+          </div>
+        ))}
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// Analysis Dropdown Component
+const AnalysisDropdown = ({ analysis }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Card className="hover:shadow-lg transition-shadow duration-200">
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <Button onClick={() => setIsOpen(!isOpen)}>
+            {isOpen ? 'Hide Analysis Steps' : 'Show Analysis Steps'}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      {isOpen && (
+        <CardContent>
+          <div className="prose prose-sm max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {analysis}
+            </ReactMarkdown>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+};
+
+const extractAnalysisSteps = (narrative) => {
+  const thinkTagContent = narrative.match(/<think>([\s\S]*?)<\/think>/);
+  return thinkTagContent ? thinkTagContent[1] : '';
+};
+
+const removeThinkTagContent = (narrative) => {
+  return narrative.replace(/<think>[\s\S]*?<\/think>/, '');
+};
+
+// Main Component
+export default function FinancialAnalysisPage() {
+  const [symbol, setSymbol] = useState('AAPL');
+  const [inputSymbol, setInputSymbol] = useState('AAPL');
+  const [basicData, setBasicData] = useState(null);
+  const [detailedData, setDetailedData] = useState(null);
+  const [confidenceData, setConfidenceData] = useState(null);
+  const [backtestData, setBacktestData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch all data in parallel
+      const [basicResult, detailedResult, confidenceResult, backtestResult] = await Promise.all([
+        executeAnalysis(symbol),
+        executeDetailedAnalysis(symbol),
+        getConfidenceScore(symbol),
+        backtestStrategy(symbol)
+      ]);
+      // Validate confidence data before setting state
+      const validConfidenceData = confidenceResult?.data || {
+        overall_confidence: 0,
+        technical_confidence: 0,
+        statistical_confidence: 0,
+        market_confidence: 0,
+        interpretation: "No confidence data available"
+      };
+  
+      setBasicData(basicResult.data);
+      setDetailedData(detailedResult.data);
+      setConfidenceData(validConfidenceData);
+      setBacktestData(backtestResult.data);
+    } catch (err) {
+      setError(err.message);
+      // Set default values for confidence data in case of error
+      setConfidenceData({
+        overall_confidence: 0,
+        technical_confidence: 0,
+        statistical_confidence: 0,
+        market_confidence: 0,
+        interpretation: "Error loading confidence data"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllData();
+  }, [symbol]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.amount || !formData.category) return;
-    
-    onSubmit({
-      ...formData,
-      amount: parseFloat(formData.amount)
-    });
-    setFormData(initialState);
+    setSymbol(inputSymbol);
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Input
-        type="number"
-        placeholder="Amount"
-        value={formData.amount}
-        onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-        className="mb-2"
-        required
-      />
-      <Select
-        value={formData.category}
-        onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Category" />
-        </SelectTrigger>
-        <SelectContent>
-          {CATEGORIES.map(category => (
-            <SelectItem key={category} value={category}>
-              {category.charAt(0).toUpperCase() + category.slice(1)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Input
-        type="text"
-        placeholder="Description"
-        value={formData.description}
-        onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-        className="mb-2"
-      />
-      <Input
-        type="date"
-        value={formData.date}
-        onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-        className="mb-2"
-        required
-      />
-      <Button type="submit" className="w-full">
-        <Plus className="w-4 h-4 mr-2" /> Add Expense
-      </Button>
-    </form>
-  );
-};
-
-const Dashboard = () => {
-  const { expenses = [], stats = {}, addExpense, deleteExpense } = useExpense();
-
-  // Memoized data transformations
-  const getHighestCategory = useMemo(() => {
-    const categoryTotals = stats.categoryTotals || {};
-    const entries = Object.entries(categoryTotals);
-    return entries.length > 0 
-      ? entries.sort(([,a], [,b]) => b - a)[0][0]
-      : 'No data';
-  }, [stats.categoryTotals]);
-
-  const monthlyTrends = useMemo(() => {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthlyTotals = new Map();
-    const today = new Date();
-    const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 5, 1);
-
-    // Initialize last 6 months with zero values
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const monthKey = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-      monthlyTotals.set(monthKey, 0);
+  const handleSymbolSearch = async (query) => {
+    if (query.length >= 2) {
+      const results = await searchSymbols(query);
+      setSearchResults(results);
+    } else {
+      setSearchResults([]);
     }
+  };
 
-    // Sum expenses by month
-    expenses.forEach(expense => {
-      const expenseDate = new Date(expense.date);
-      if (expenseDate >= sixMonthsAgo) {
-        const monthKey = `${monthNames[expenseDate.getMonth()]} ${expenseDate.getFullYear()}`;
-        if (monthlyTotals.has(monthKey)) {
-          monthlyTotals.set(monthKey, monthlyTotals.get(monthKey) + expense.amount);
-        }
-      }
+  const exportToPDF = async () => {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const margin = 10;
+    const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2;
+    let y = margin;
+  
+    // Add title
+    pdf.setFontSize(18);
+    pdf.setTextColor(40);
+    pdf.text('Financial Analysis Report', pageWidth / 2, y, { align: 'center' });
+    y += 10;
+  
+    // Add company name
+    if (basicData?.company_name) {
+      pdf.setFontSize(14);
+      pdf.setTextColor(60);
+      pdf.text(`Company: ${basicData.company_name}`, margin, y);
+      y += 10;
+    }
+  
+    // Add overview metrics
+    const metrics = [
+      { title: 'Current Price', value: `${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[0]?.Close.toFixed(2)}` },
+      { title: 'Volume', value: new Intl.NumberFormat().format(basicData?.historical_data?.[0]?.Volume) },
+      { title: 'Volatility', value: `${(basicData?.historical_data?.[0]?.Volatility * 100).toFixed(2)}%` },
+      { title: 'Confidence Score', value: `${(confidenceData?.overall_confidence * 100).toFixed(1)}%` }
+    ];
+  
+    pdf.setFontSize(12);
+    metrics.forEach(metric => {
+      pdf.text(`${metric.title}: ${metric.value}`, margin, y);
+      y += 8;
     });
+  
+    y += 10;
+  
+    // Add company overview
+    if (basicData?.metadata) {
+      pdf.setFontSize(14);
+      pdf.setTextColor(40);
+      pdf.text('Company Overview', margin, y);
+      y += 10;
+  
+      const overview = [
+        { title: 'Sector', value: basicData.metadata.sector || 'N/A' },
+        { title: 'Industry', value: basicData.metadata.industry || 'N/A' },
+        { title: 'Market Cap', value: basicData.metadata.market_cap 
+          ? new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: basicData.metadata.currency || 'USD',
+              notation: 'compact',
+              maximumFractionDigits: 1
+            }).format(basicData.metadata.market_cap)
+          : 'N/A' },
+        { title: 'Currency', value: basicData.metadata.currency || 'USD' }
+      ];
+  
+      overview.forEach(item => {
+        pdf.text(`${item.title}: ${item.value}`, margin, y);
+        y += 8;
+      });
+  
+      y += 10;
+    }
+  
+    // Add AI Analysis
+    if (narrativeWithoutThinkTag) {
+      pdf.setFontSize(14);
+      pdf.setTextColor(40);
+      pdf.text('AI Analysis', margin, y);
+      y += 10;
+  
+      pdf.setFontSize(12);
+      pdf.setTextColor(60);
+      const lines = pdf.splitTextToSize(narrativeWithoutThinkTag, pageWidth);
+      lines.forEach(line => {
+        if (y + 10 > pdf.internal.pageSize.getHeight() - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+        pdf.text(line, margin, y);
+        y += 8;
+      });
+    }
+  
+    // Add Analysis Steps
+    if (analysisSteps) {
+      pdf.setFontSize(14);
+      pdf.setTextColor(40);
+      pdf.text('Analysis Steps', margin, y);
+      y += 10;
+  
+      pdf.setFontSize(12);
+      pdf.setTextColor(60);
+      const lines = pdf.splitTextToSize(analysisSteps, pageWidth);
+      lines.forEach(line => {
+        if (y + 10 > pdf.internal.pageSize.getHeight() - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+        pdf.text(line, margin, y);
+        y += 8;
+      });
+    }
+  
+    // Add charts
+    const charts = [
+      { id: 'price-chart', title: 'Price Analysis' },
+      { id: 'rsi-macd-chart', title: 'RSI & MACD' },
+      { id: 'volume-chart', title: 'Volume Analysis' },
+      { id: 'backtest-chart', title: 'Backtest Results' },
+      { id: 'risk-chart', title: 'Risk Metrics' }
+    ];
+  
+    for (const chart of charts) {
+      const chartElement = document.getElementById(chart.id);
+      if (chartElement) {
+        const canvas = await html2canvas(chartElement);
+        const imgData = canvas.toDataURL('image/png');
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * pageWidth) / imgProps.width;
+  
+        if (y + imgHeight > pdf.internal.pageSize.getHeight() - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+  
+        pdf.addImage(imgData, 'PNG', margin, y, pageWidth, imgHeight);
+        y += imgHeight + 10;
+      }
+    }
+  
+    pdf.save("analysis.pdf");
+  };
+  
 
-    // Convert to array and sort chronologically
-    return Array.from(monthlyTotals.entries())
-      .map(([month, amount]) => ({ month, amount }))
-      .reverse();
-  }, [expenses]);
-
-  const weeklyData = useMemo(() => 
-    Object.entries(stats.dailyTotals || {}).map(([day, amount]) => ({
-      day,
-      amount: amount || 0
-    })), [stats.dailyTotals]);
-
-  const pieChartData = useMemo(() => 
-    Object.entries(stats.weeklyCategoryTotals || {}).map(([name, value]) => ({
-      name,
-      value: value || 0
-    })), [stats.weeklyCategoryTotals]);
-
-  // Handlers
-  const handleAddExpense = useCallback((newExpense) => {
-    addExpense(newExpense);
-  }, [addExpense]);
-
-  const handleDeleteExpense = useCallback((id) => {
-    deleteExpense(id);
-  }, [deleteExpense]);
+  const analysisSteps = extractAnalysisSteps(detailedData?.narrative || '');
+  const narrativeWithoutThinkTag = removeThinkTagContent(detailedData?.narrative || '');
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">Financial Dashboard</h1>
-      
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="weekly">Weekly Analysis</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Add New Expense</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ExpenseForm 
-                  onSubmit={handleAddExpense}
-                  initialState={INITIAL_EXPENSE_STATE}
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-                <AlertCircle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ₹{(stats.totalExpenses || 0).toLocaleString()}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {expenses.length} total transactions
-                </p>
-                <p className="text-sm mt-2 text-muted-foreground">
-                  Highest category: {getHighestCategory}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Category Breakdown</CardTitle>
-                <PieChart className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                {Object.keys(stats.categoryTotals || {}).length > 0 ? (
-                  <div className="space-y-2">
-                    {Object.entries(stats.categoryTotals || {}).map(([category, amount]) => (
-                      <div key={category} className="flex justify-between">
-                        <span className="capitalize">{category}</span>
-                        <span>₹{amount.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState message="No category data available" />
-                )}
-              </CardContent>
-            </Card>
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto p-6 space-y-6" id="analysis-content">
+        {/* Header and Search */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              Financial Analysis
+            </h1>
+            {basicData?.company_name && (
+              <p className="text-gray-600 mt-1">{basicData.company_name}</p>
+            )}
           </div>
-
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle>Monthly Trends</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartWrapper data={monthlyTrends}>
-                <LineChart data={monthlyTrends}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line 
-                    type="monotone" 
-                    dataKey="amount" 
-                    stroke="#8884d8"
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                  />
-                </LineChart>
-              </ChartWrapper>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="weekly" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Weekly Total Expenses</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  ₹{(stats.weeklyTotal || 0).toLocaleString()}
+          
+          <form onSubmit={handleSubmit} className="flex w-full md:w-auto space-x-2">
+            <div className="relative flex-1 md:flex-initial">
+              <Input
+                value={inputSymbol}
+                onChange={(e) => {
+                  setInputSymbol(e.target.value);
+                  handleSymbolSearch(e.target.value);
+                }}
+                placeholder="Search stocks..."
+                className="w-full md:w-64 pl-10"
+              />
+              <Search className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
+              
+              {searchResults.length > 0 && (
+                <div className="absolute z-10 w-full bg-white shadow-xl rounded-md mt-1 border border-gray-100">
+                  {searchResults.map((result) => (
+                    <div
+                      key={result.symbol}
+                      className="p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                      onClick={() => {
+                        setInputSymbol(result.symbol);
+                        setSearchResults([]);
+                      }}
+                    >
+                      <div className="font-medium">{result.symbol}</div>
+                      <div className="text-sm text-gray-600">{result.name}</div>
+                    </div>
+                  ))}
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  {Object.keys(stats.dailyTotals || {}).length} days with transactions
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Weekly Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ChartWrapper data={weeklyData}>
-                  <BarChart data={weeklyData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="amount" fill="#82ca9d" />
-                  </BarChart>
-                </ChartWrapper>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="expenses" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Expenses List</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {expenses.length > 0 ? (
-                <div className="space-y-4">
-                  {expenses
-                    .sort((a, b) => new Date(b.date) - new Date(a.date))
-                    .map((expense) => (
-                      <div key={expense.id} className="flex justify-between items-center border-b pb-2">
-                        <div>
-                          <p className="font-medium">
-                            {expense.description || 'No description'}
-                          </p>
-                          <p className="text-sm text-muted-foreground capitalize">
-                            {expense.category} - {new Date(expense.date).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className="font-semibold">
-                            ₹{expense.amount.toLocaleString()}
-                          </span>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDeleteExpense(expense.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              ) : (
-                <EmptyState message="No expenses recorded yet" />
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+            <Button 
+              type="submit"
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Search className="h-4 w-4 mr-2" />
+              Analyze
+            </Button>
+          </form>
+        </div>
 
-        <TabsContent value="analytics" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Category Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartWrapper data={pieChartData}>
-                <RePieChart>
-                  <Pie 
-                    data={pieChartData} 
-                    dataKey="value" 
-                    nameKey="name" 
-                    cx="50%" 
-                    cy="50%" 
-                    outerRadius={80}
-                  >
-                    {pieChartData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={COLORS[index % COLORS.length]} 
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </RePieChart>
-              </ChartWrapper>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {loading ? (
+          <LoadingSkeleton />
+        ) : (
+          <Tabs defaultValue="overview" className="space-y-6">
+           {/* Export Button */}
+           <Button onClick={exportToPDF} className="bg-indigo-600 hover:bg-indigo-700">
+              Export as PDF
+            </Button>
+            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="technical">Technical Analysis</TabsTrigger>
+              <TabsTrigger value="backtest">Backtest Results</TabsTrigger>
+              <TabsTrigger value="risk">Risk Analysis</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-6">
+              {/* Overview Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <MetricCard
+                  title="Current Price"
+                  value={`${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[0]?.Close.toFixed(2)}`}
+                  change={((basicData?.historical_data?.[0]?.Close - basicData?.historical_data?.[1]?.Close) / basicData?.historical_data?.[1]?.Close * 100) || 0}
+                  icon={Banknote}
+                  description="Latest trading price and 24h change"
+                />
+                <MetricCard
+                  title="Volume"
+                  value={new Intl.NumberFormat().format(basicData?.historical_data?.[0]?.Volume)}
+                  change={((basicData?.historical_data?.[0]?.Volume -basicData?.historical_data?.[1]?.Volume) / basicData?.historical_data?.[1]?.Volume * 100) || 0}
+                  icon={Activity}
+                  description="Trading volume and 24h change"
+                />
+                <MetricCard
+                  title="Volatility"
+                  value={`${(detailedData?.technical_analysis?.risk_metrics?.Return_Volatility * 100 || 0).toFixed(2)}%`}
+                  change={0}
+                  icon={TrendingUp}
+                  description="30-day historical volatility"
+                />
+                <ConfidenceScore 
+                  score={confidenceData?.overall_confidence || 0}
+                  interpretation={confidenceData?.interpretation || ''}
+                  technical={confidenceData?.technical_confidence || 0}
+                  statistical={confidenceData?.statistical_confidence?.score || 0}
+                  market={confidenceData?.market_confidence?.score || 0}
+                />
+                
+              </div>
+
+              {/* Company Overview */}
+              <Card className="hover:shadow-lg transition-shadow duration-200">
+                <CardHeader>
+                  <CardTitle>Company Overview</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Sector</p>
+                      <p className="font-medium">{basicData?.metadata?.sector || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Industry</p>
+                      <p className="font-medium">{basicData?.metadata?.industry || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Market Cap</p>
+                      <p className="font-medium">
+                        {basicData?.metadata?.market_cap 
+                          ? new Intl.NumberFormat('en-US', {
+                              style: 'currency',
+                              currency: basicData?.metadata?.currency || 'USD',
+                              notation: 'compact',
+                              maximumFractionDigits: 1
+                            }).format(basicData.metadata.market_cap)
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Currency</p>
+                      <p className="font-medium">{basicData?.metadata?.currency || 'USD'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* AI Analysis */}
+              <Card className="hover:shadow-lg transition-shadow duration-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Activity className="h-5 w-5" />
+                    <span>AI Analysis</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose prose-sm max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {narrativeWithoutThinkTag}
+                    </ReactMarkdown>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Analysis Steps Dropdown */}
+              <AnalysisDropdown analysis={analysisSteps} />
+
+             
+            </TabsContent>
+
+            <TabsContent value="technical" className="space-y-6">
+              {/* Price Chart */}
+              <Card className="hover:shadow-lg transition-shadow duration-200" id="price-chart">
+                <CardHeader>
+                  <CardTitle>Price Analysis</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={basicData?.historical_data || []}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="Date" 
+                          tickFormatter={(date) => new Date(date).toLocaleDateString()}
+                        />
+                        <YAxis />
+                        <Tooltip 
+                          labelFormatter={(date) => new Date(date).toLocaleDateString()}
+                          formatter={(value) => [`$${value.toFixed(2)}`, '']}
+                        />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="Close" 
+                          stroke="#6366f1" 
+                          name="Price"
+                          dot={false}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="50_MA" 
+                          stroke="#22c55e" 
+                          name="50 MA"
+                          dot={false}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="200_MA" 
+                          stroke="#eab308" 
+                          name="200 MA"
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Technical Indicators */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="hover:shadow-lg transition-shadow duration-200" id="rsi-macd-chart">
+                  <CardHeader>
+                    <CardTitle>RSI & MACD</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={basicData?.historical_data || []}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="Date" 
+                            tickFormatter={(date) => new Date(date).toLocaleDateString()}
+                          />
+                          <YAxis />
+                          <Tooltip 
+                            labelFormatter={(date) => new Date(date).toLocaleDateString()}
+                          />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="RSI" 
+                            stroke="#6366f1" 
+                            name="RSI"
+                            dot={false}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="MACD" 
+                            stroke="#22c55e" 
+                            name="MACD"
+                            dot={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="hover:shadow-lg transition-shadow duration-200" id="volume-chart">
+                  <CardHeader>
+                    <CardTitle>Volume Analysis</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={basicData?.historical_data || []}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="Date" 
+                            tickFormatter={(date) => new Date(date).toLocaleDateString()}
+                          />
+                          <YAxis 
+                            tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`}
+                          />
+                          <Tooltip 
+                            labelFormatter={(date) => new Date(date).toLocaleDateString()}
+                            formatter={(value) => [new Intl.NumberFormat().format(value), 'Volume']}
+                          />
+                          <Legend />
+                          <Bar 
+                            dataKey="Volume" 
+                            fill="#6366f1" 
+                            name="Volume"
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="backtest" className="space-y-6">
+              <BacktestResults data={backtestData || { metrics: {}, portfolio_history: [] }} />
+            </TabsContent>
+
+            <TabsContent value="risk" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <RiskMetrics metrics={detailedData?.technical_analysis?.risk_metrics || {}} />
+                <Card className="hover:shadow-lg transition-shadow duration-200" id="risk-chart">
+                  <CardHeader>
+                    <CardTitle>Monte Carlo Simulation</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Expected Price</p>
+                        <p className="text-lg font-medium">
+                          ${detailedData?.monte_carlo?.expected_price?.toFixed(2)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">95% Confidence Interval</p>
+                        <p className="text-lg font-medium">
+                          ${detailedData?.monte_carlo?.confidence_interval?.lower?.toFixed(2)} - 
+                          ${detailedData?.monte_carlo?.confidence_interval?.upper?.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
     </div>
   );
-};
+}
 
-export default Dashboard;
+// Loading Skeleton Component
+const LoadingSkeleton = () => (
+  <div className="space-y-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {[...Array(4)].map((_, i) => (
+        <Card key={i}>
+          <CardContent className="pt-6">
+            <Skeleton className="h-4 w-[100px] mb-4" />
+            <Skeleton className="h-8 w-[150px] mb-2" />
+            <Skeleton className="h-4 w-[200px]" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {[...Array(4)].map((_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <Skeleton className="h-6 w-[150px]" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-[300px] w-full" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  </div>
+);

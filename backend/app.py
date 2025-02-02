@@ -11,6 +11,9 @@ from financial_analyzer import FinancialAnalyzer
 import warnings
 import yfinance as yf
 from financial_narrative_generator import FinancialNarrativeGenerator  # Import the new class
+from dataclasses import dataclass
+from news_fetcher import NewsFetcher
+
 
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
@@ -340,6 +343,73 @@ def backtest_strategy():
         
     except Exception as e:
         return create_error_response(str(e), 500)
+
+RSS_FEEDS = [
+    {"url": "https://www.livemint.com/rss/companies", "name": "Livemint Companies"},
+    {
+        "url": "https://www.moneycontrol.com/rss/business.xml",
+        "name": "MoneyControl Business",
+    },
+    {
+        "url": "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+        "name": "Economic Times Markets",
+    },
+    # Add more RSS feeds as needed
+]
+
+# Initialize NewsFetcher
+try:
+    news_fetcher = NewsFetcher(RSS_FEEDS)
+except Exception as e:
+    print(f"Error initializing NewsFetcher: {str(e)}")
+    news_fetcher = None
+
+
+# Add this new endpoint
+@app.route("/api/news", methods=["GET"])
+def get_news():
+    """
+    Fetch news from configured RSS feeds.
+    Query parameters:
+    - limit (optional): Number of news items to return (default: 50)
+    - source (optional): Filter by news source
+    """
+    try:
+        if news_fetcher is None:
+            return create_error_response(
+                "News fetcher is not properly initialized", 500
+            )
+
+        # Get query parameters
+        limit = request.args.get("limit", default=50, type=int)
+        source = request.args.get("source", default=None, type=str)
+
+        # Fetch news
+        news_items = news_fetcher.fetch_all_news()
+
+        # Apply filters
+        if source:
+            news_items = [
+                item for item in news_items if item["source"].lower() == source.lower()
+            ]
+
+        # Apply limit
+        news_items = news_items
+
+        return jsonify(
+            {
+                "status": "success",
+                "data": {
+                    "articles": news_items,
+                    "total": len(news_items),
+                    "sources": [feed["name"] for feed in RSS_FEEDS],
+                },
+            }
+        )
+
+    except Exception as e:
+        return create_error_response(str(e), 500)
+
 
 
 

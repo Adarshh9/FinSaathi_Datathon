@@ -13,6 +13,7 @@ import {
   Wallet,
   ArrowUpNarrowWide,
   Menu,
+  Newspaper,
   X
 } from "lucide-react";
 import Link from "next/link";
@@ -24,7 +25,7 @@ import finsaathiLogo from "@/assets/finsaathi-logo.png";
 const sidebarLinks = [
   {
     title: "Analysis",
-    href: "/dashboard/analysis",
+    href: "/dashboard",
     icon: LayoutDashboard,
     color: "text-blue-500"
   },
@@ -32,6 +33,12 @@ const sidebarLinks = [
     title: "FinBuddy",
     href: "/dashboard/finBuddy",
     icon: Bot,
+    color: "text-blue-500"
+  },
+  {
+    title: "Latest News",
+    href: "/dashboard/news",
+    icon: Newspaper,
     color: "text-blue-500"
   },
   // {
@@ -46,12 +53,12 @@ const sidebarLinks = [
   //   icon: ArrowUpNarrowWide,
   //   color: "text-blue-500"
   // },
-  {
-    title: "Overview",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    color: "text-blue-500"
-  },
+  // {
+  //   title: "Overview", 
+  //   href: "/dashboard",
+  //   icon: LayoutDashboard,
+  //   color: "text-blue-500"
+  // },
   {
     title: "Settings",
     href: "/dashboard/settings",
