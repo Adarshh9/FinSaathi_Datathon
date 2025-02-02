@@ -133,7 +133,7 @@ const HomePage = () => {
                   <p className="font-medium flex items-center gap-2">
                     <span className="text-black-600">➤</span> Send 
                     <code className="mx-2 px-2 py-1 bg-primary/10 text-primary rounded">
-                      join rise-mysterious
+                    join label-strength
                     </code> 
                     to
                   </p>

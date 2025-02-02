@@ -14,6 +14,23 @@ from financial_narrative_generator import FinancialNarrativeGenerator  # Import 
 from dataclasses import dataclass
 from news_fetcher import NewsFetcher
 
+from flask import Flask, request, send_file, jsonify
+ # You'll need to use a Python PDF library like reportlab or PyPDF2
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from io import BytesIO
+import base64
+from PIL import Image as PILImage
+import json
+from datetime import datetime
+import markdown
+import re
+import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
@@ -53,9 +70,7 @@ class FinSaathiAI:
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are FinSaathi AI, an expert financial advisor specialized in Indian financial markets 
-                        and investment options. Provide practical advice considering Indian context, available investment 
-                        options, and typical returns in the Indian market. Use INR amounts and Indian financial terms."""
+                        "content": """You are a Market Education Chatbot, designed to explain financial concepts, investment principles, and economic fundamentals in a clear and engaging way. You do not provide financial advice, stock recommendations, or market predictions. If a user asks an off-topic question, politely redirect them to market-related topics. Keep responses simple, factual, and educational."""
                     },
                     {
                         "role": "user",
@@ -411,7 +426,102 @@ def get_news():
         return create_error_response(str(e), 500)
 
 
+def format_currency(value, currency='USD'):
+    """Format currency values with abbreviations"""
+    if value is None:
+        return 'N/A'
+    
+    try:
+        value = float(value)
+        if value >= 1_000_000_000:
+            return f'{currency}{value/1_000_000_000:.1f}B'
+        elif value >= 1_000_000:
+            return f'{currency}{value/1_000_000:.1f}M'
+        elif value >= 1_000:
+            return f'{currency}{value/1_000:.1f}K'
+        else:
+            return f'{currency}{value:.2f}'
+    except (ValueError, TypeError):
+        return 'N/A'
 
+def create_chart_image(chart_data):
+    """Convert base64 chart data to reportlab Image object"""
+    try:
+        # Remove data URL prefix if present
+        if 'base64,' in chart_data:
+            chart_data = chart_data.split('base64,')[1]
+            
+        # Decode base64 to image
+        image_data = BytesIO(base64.b64decode(chart_data))
+        img = PILImage.open(image_data)
+        
+        # Convert to RGB if necessary
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+            
+        # Save as PNG in memory
+        img_buffer = BytesIO()
+        img.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        
+        return Image(img_buffer, width=180*mm, height=108*mm)  # 16:9 aspect ratio
+    except Exception as e:
+        print(f"Error creating chart image: {e}")
+        return None
+
+def clean_markdown(text):
+    """Clean markdown text and convert to plain text"""
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Convert markdown to plain text
+    text = markdown.markdown(text)
+    # Remove any remaining HTML
+    text = re.sub(r'<[^>]+>', '', text)
+    return text.strip()
+
+@app.route('/api/generate-pdf', methods=['POST'])
+def generate_pdf():
+    try:
+        data = request.get_json()
+        if not data:
+            return create_error_response("Invalid data", 400)
+
+        chartData = data.get('chartData', {})
+        priceData = chartData.get('priceData', [])
+        volumeData = chartData.get('volumeData', [])
+        rsiMacdData = chartData.get('rsiMacdData', [])
+
+        # Create a figure for price data
+        fig1, ax1 = plt.subplots()
+        dates = [d.get('Date') for d in priceData]
+        prices = [d.get('Close') for d in priceData]
+        ax1.plot(dates, prices, label="Close Price")
+        ax1.set_title("Price Chart")
+        ax1.legend()
+
+        # Convert figure to image
+        img_buf1 = BytesIO()
+        fig1.savefig(img_buf1, format='png')
+        img_buf1.seek(0)
+        pdf_image1 = Image(img_buf1, width=180*mm, height=100*mm)
+
+        # Repeat for volume or RSI/MACD if desired
+        # ...existing code or more plots...
+
+        # Create PDF document
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+
+        elements.append(pdf_image1)
+        # Append additional images, text, tables, etc.
+
+        doc.build(elements)
+
+        buffer.seek(0)
+        return send_file(buffer, mimetype='application/pdf')
+    except Exception as e:
+        return create_error_response(str(e), 500)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
