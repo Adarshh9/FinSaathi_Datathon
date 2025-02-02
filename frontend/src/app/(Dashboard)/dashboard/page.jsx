@@ -532,7 +532,7 @@ export default function FinancialAnalysisPage() {
   
       // Key Metrics Section
       const metrics = [
-        ['Current Price', `${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[0]?.Close.toFixed(2)}`],
+        ['Current Price', `${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[basicData?.historical_data?.length - 1]?.Close.toFixed(2)}`],
         ['Trading Volume', new Intl.NumberFormat().format(basicData?.historical_data?.[0]?.Volume)],
         ['Market Cap', formatCurrency(basicData?.metadata?.market_cap)],
         ['Confidence Score', `${(confidenceData?.overall_confidence * 100).toFixed(1)}%`]
@@ -728,7 +728,7 @@ export default function FinancialAnalysisPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <MetricCard
                   title="Current Price"
-                  value={`${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[0]?.Close.toFixed(2)}`}
+                  value={`${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[basicData?.historical_data?.length - 1]?.Close.toFixed(2)}`}
                   change={((basicData?.historical_data?.[0]?.Close - basicData?.historical_data?.[1]?.Close) / basicData?.historical_data?.[1]?.Close * 100) || 0}
                   icon={Banknote}
                   description="Latest trading price and 24h change"
