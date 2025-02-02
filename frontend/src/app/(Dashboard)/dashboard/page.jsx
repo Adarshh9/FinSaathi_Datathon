@@ -54,6 +54,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import showdown from 'showdown'
 
 // API Functions
 const executeAnalysis = async (symbol) => {
@@ -409,142 +410,237 @@ export default function FinancialAnalysisPage() {
       setSearchResults([]);
     }
   };
-
   const exportToPDF = async () => {
     const pdf = new jsPDF('p', 'mm', 'a4');
-    const margin = 10;
+    const margin = 15;
     const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2;
     let y = margin;
   
-    // Add title
-    pdf.setFontSize(18);
-    pdf.setTextColor(40);
-    pdf.text('Financial Analysis Report', pageWidth / 2, y, { align: 'center' });
-    y += 10;
+    // Helper functions
+    const addNewPageIfNeeded = (requiredSpace) => {
+      if (y + requiredSpace > pdf.internal.pageSize.getHeight() - margin) {
+        pdf.addPage();
+        y = margin;
+        return true;
+      }
+      return false;
+    };
   
-    // Add company name
-    if (basicData?.company_name) {
-      pdf.setFontSize(14);
-      pdf.setTextColor(60);
-      pdf.text(`Company: ${basicData.company_name}`, margin, y);
-      y += 10;
-    }
+    const formatCurrency = (value, currency = 'USD') => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency,
+        notation: 'compact',
+        maximumFractionDigits: 1
+      }).format(value);
+    };
   
-    // Add overview metrics
-    const metrics = [
-      { title: 'Current Price', value: `${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[0]?.Close.toFixed(2)}` },
-      { title: 'Volume', value: new Intl.NumberFormat().format(basicData?.historical_data?.[0]?.Volume) },
-      { title: 'Volatility', value: `${(basicData?.historical_data?.[0]?.Volatility * 100).toFixed(2)}%` },
-      { title: 'Confidence Score', value: `${(confidenceData?.overall_confidence * 100).toFixed(1)}%` }
-    ];
+    // Create a promise-based chart capture function
+    const captureChart = async (elementId) => {
+      const chartElement = document.getElementById(elementId);
+      if (!chartElement) return null;
   
-    pdf.setFontSize(12);
-    metrics.forEach(metric => {
-      pdf.text(`${metric.title}: ${metric.value}`, margin, y);
-      y += 8;
-    });
+      // Get the SVG element directly if it exists
+      const svgElement = chartElement.querySelector('svg');
+      if (!svgElement) return null;
   
-    y += 10;
+      try {
+        // Convert SVG to canvas for better quality
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size to match SVG
+        const svgRect = svgElement.getBoundingClientRect();
+        canvas.width = svgRect.width * 2; // 2x for better quality
+        canvas.height = svgRect.height * 2;
+        
+        // Create image from SVG
+        const img = new Image();
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+        
+        await new Promise((resolve) => {
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve();
+          };
+        });
+        
+        return canvas.toDataURL('image/png');
+      } catch (error) {
+        console.error('Error capturing chart:', error);
+        return null;
+      }
+    };
   
-    // Add company overview
-    if (basicData?.metadata) {
-      pdf.setFontSize(14);
+    try {
+      // Start loading logo early
+      const logoPromise = new Promise((resolve) => {
+        const logo = new Image();
+        logo.src = 'https://github.com/yashgv/FinSaathi_Datathon/blob/main/frontend/src/assets/finsaathi-logo.png'; // Update path to match your logo location
+        logo.onload = () => resolve(logo);
+        logo.onerror = () => resolve(null);
+      });
+  
+      // Capture charts in parallel
+      const [priceChartData, volumeChartData, rsiMacdChartData] = await Promise.all([
+        captureChart('price-chart'),
+        captureChart('volume-chart'),
+        captureChart('rsi-macd-chart')
+      ]);
+  
+      // Add logo if loaded successfully
+      const logo = await logoPromise;
+      if (logo) {
+        pdf.addImage(logo, 'PNG', margin, margin, 30, 30);
+      }
+  
+      // Title and Header
+      pdf.setFillColor(52, 86, 153);
+      pdf.rect(0, 0, pdf.internal.pageSize.getWidth(), 50, 'F');
+      pdf.setTextColor(255);
+      pdf.setFontSize(28);
+      pdf.setFont(undefined, 'bold');
+      pdf.text('Financial Analysis Report', 50, 35);
+  
+      // Subtitle with date
+      pdf.setFontSize(12);
+      pdf.setFont(undefined, 'normal');
+      const dateStr = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      pdf.text(dateStr, 50, 45);
+      y = 70;
+  
+      // Company Information Section
+      pdf.setDrawColor(52, 86, 153);
+      pdf.setFillColor(245, 247, 250);
+      pdf.roundedRect(margin, y, pageWidth, 40, 3, 3, 'FD');
+      
       pdf.setTextColor(40);
-      pdf.text('Company Overview', margin, y);
-      y += 10;
+      pdf.setFontSize(20);
+      pdf.setFont(undefined, 'bold');
+      pdf.text(`${basicData?.company_name || symbol}`, margin + 5, y + 15);
+      
+      pdf.setFontSize(12);
+      pdf.setFont(undefined, 'normal');
+      pdf.text(`Sector: ${basicData?.metadata?.sector || 'N/A'}`, margin + 5, y + 30);
+      pdf.text(`Industry: ${basicData?.metadata?.industry || 'N/A'}`, margin + pageWidth/2, y + 30);
+      y += 50;
   
-      const overview = [
-        { title: 'Sector', value: basicData.metadata.sector || 'N/A' },
-        { title: 'Industry', value: basicData.metadata.industry || 'N/A' },
-        { title: 'Market Cap', value: basicData.metadata.market_cap 
-          ? new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: basicData.metadata.currency || 'USD',
-              notation: 'compact',
-              maximumFractionDigits: 1
-            }).format(basicData.metadata.market_cap)
-          : 'N/A' },
-        { title: 'Currency', value: basicData.metadata.currency || 'USD' }
+      // Key Metrics Section
+      const metrics = [
+        ['Current Price', `${basicData?.metadata?.currency || '$'}${basicData?.historical_data?.[0]?.Close.toFixed(2)}`],
+        ['Trading Volume', new Intl.NumberFormat().format(basicData?.historical_data?.[0]?.Volume)],
+        ['Market Cap', formatCurrency(basicData?.metadata?.market_cap)],
+        ['Confidence Score', `${(confidenceData?.overall_confidence * 100).toFixed(1)}%`]
       ];
   
-      overview.forEach(item => {
-        pdf.text(`${item.title}: ${item.value}`, margin, y);
-        y += 8;
+      pdf.setFillColor(52, 86, 153, 0.1);
+      pdf.rect(margin, y, pageWidth, 8, 'F');
+      pdf.setTextColor(52, 86, 153);
+      pdf.setFontSize(16);
+      pdf.setFont(undefined, 'bold');
+      pdf.text('Key Metrics', margin + 5, y + 6);
+      y += 15;
+  
+      // Create a grid for metrics
+      const colWidth = pageWidth / 2;
+      metrics.forEach(([label, value], index) => {
+        const xPos = margin + (index % 2) * colWidth;
+        pdf.setFontSize(11);
+        pdf.setFont(undefined, 'bold');
+        pdf.setTextColor(80);
+        pdf.text(label, xPos, y);
+        pdf.setFont(undefined, 'normal');
+        pdf.setTextColor(40);
+        pdf.text(value, xPos, y + 6);
+        if (index % 2 === 1) y += 15;
       });
+      y += 15;
   
-      y += 10;
-    }
+      // Add charts if captured successfully
+      const addChartToPDF = (chartData, title) => {
+        if (chartData) {
+          addNewPageIfNeeded(160);
+          pdf.setFillColor(52, 86, 153, 0.1);
+          pdf.rect(margin, y, pageWidth, 8, 'F');
+          pdf.setTextColor(52, 86, 153);
+          pdf.setFontSize(16);
+          pdf.setFont(undefined, 'bold');
+          pdf.text(title, margin + 5, y + 6);
+          y += 15;
   
-    // Add AI Analysis
-    if (narrativeWithoutThinkTag) {
-      pdf.setFontSize(14);
-      pdf.setTextColor(40);
-      pdf.text('AI Analysis', margin, y);
-      y += 10;
-  
-      pdf.setFontSize(12);
-      pdf.setTextColor(60);
-      const lines = pdf.splitTextToSize(narrativeWithoutThinkTag, pageWidth);
-      lines.forEach(line => {
-        if (y + 10 > pdf.internal.pageSize.getHeight() - margin) {
-          pdf.addPage();
-          y = margin;
+          const imgProps = pdf.getImageProperties(chartData);
+          const imgHeight = (imgProps.height * pageWidth) / imgProps.width;
+          pdf.addImage(chartData, 'PNG', margin, y, pageWidth, imgHeight);
+          y += imgHeight + 15;
         }
-        pdf.text(line, margin, y);
-        y += 8;
-      });
-    }
+      };
   
-    // Add Analysis Steps
-    if (analysisSteps) {
-      pdf.setFontSize(14);
-      pdf.setTextColor(40);
-      pdf.text('Analysis Steps', margin, y);
-      y += 10;
+      // Add charts in sequence
+      addChartToPDF(priceChartData, 'Price Analysis');
+      addChartToPDF(volumeChartData, 'Volume Analysis');
+      addChartToPDF(rsiMacdChartData, 'Technical Indicators');
   
-      pdf.setFontSize(12);
-      pdf.setTextColor(60);
-      const lines = pdf.splitTextToSize(analysisSteps, pageWidth);
-      lines.forEach(line => {
-        if (y + 10 > pdf.internal.pageSize.getHeight() - margin) {
-          pdf.addPage();
-          y = margin;
-        }
-        pdf.text(line, margin, y);
-        y += 8;
-      });
-    }
+      // Add narrative content
+      if (narrativeWithoutThinkTag) {
+        addNewPageIfNeeded(100);
+        pdf.setFillColor(52, 86, 153, 0.1);
+        pdf.rect(margin, y, pageWidth, 8, 'F');
+        pdf.setTextColor(52, 86, 153);
+        pdf.setFontSize(16);
+        pdf.setFont(undefined, 'bold');
+        pdf.text('AI Analysis', margin + 5, y + 6);
+        y += 15;
   
-    // Add charts
-    const charts = [
-      { id: 'price-chart', title: 'Price Analysis' },
-      { id: 'rsi-macd-chart', title: 'RSI & MACD' },
-      { id: 'volume-chart', title: 'Volume Analysis' },
-      { id: 'backtest-chart', title: 'Backtest Results' },
-      { id: 'risk-chart', title: 'Risk Metrics' }
-    ];
-  
-    for (const chart of charts) {
-      const chartElement = document.getElementById(chart.id);
-      if (chartElement) {
-        const canvas = await html2canvas(chartElement);
-        const imgData = canvas.toDataURL('image/png');
-        const imgProps = pdf.getImageProperties(imgData);
-        const imgHeight = (imgProps.height * pageWidth) / imgProps.width;
-  
-        if (y + imgHeight > pdf.internal.pageSize.getHeight() - margin) {
-          pdf.addPage();
-          y = margin;
-        }
-  
-        pdf.addImage(imgData, 'PNG', margin, y, pageWidth, imgHeight);
-        y += imgHeight + 10;
+        pdf.setFontSize(11);
+        pdf.setFont(undefined, 'normal');
+        pdf.setTextColor(60);
+        const lines = pdf.splitTextToSize(narrativeWithoutThinkTag, pageWidth);
+        lines.forEach(line => {
+          addNewPageIfNeeded(8);
+          pdf.text(line, margin, y);
+          y += 6;
+        });
       }
+  
+      // Add footers
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, pdf.internal.pageSize.getHeight() - 20, 
+                 pdf.internal.pageSize.getWidth() - margin, 
+                 pdf.internal.pageSize.getHeight() - 20);
+        
+        pdf.setFontSize(10);
+        pdf.setTextColor(150);
+        pdf.text(
+          `Page ${i} of ${totalPages}`,
+          pdf.internal.pageSize.getWidth() / 2,
+          pdf.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+        
+        pdf.setTextColor(100);
+        pdf.text(
+          basicData?.company_name || symbol,
+          margin,
+          pdf.internal.pageSize.getHeight() - 10
+        );
+      }
+  
+      // Save the PDF
+      pdf.save(`${symbol}_analysis_${new Date().toISOString().split('T')[0]}.pdf`);
+  
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      // You might want to show an error message to the user here
     }
-  
-    pdf.save("analysis.pdf");
   };
-  
 
   const analysisSteps = extractAnalysisSteps(detailedData?.narrative || '');
   const narrativeWithoutThinkTag = removeThinkTagContent(detailedData?.narrative || '');
